@@ -1,0 +1,9 @@
+## Interface: 120100, 120105
+## Title: Farmboard
+## Notes: Lightweight farming goal tracker for World of Warcraft: Midnight.
+## Author: Loyftwa
+## Version: 1.0.0
+## SavedVariables: FarmboardDB
+## IconTexture: Interface\AddOns\Farmboard\Media\FarmboardMinimapIcon
+
+Farmboard.lua
