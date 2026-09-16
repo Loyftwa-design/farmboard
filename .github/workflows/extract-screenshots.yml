@@ -1,0 +1,39 @@
+name: Extract Farmboard screenshots
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract screenshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/images /tmp/farmboard-screenshots
+          unzip -oq farmboard_screenshots.zip -d /tmp/farmboard-screenshots
+          find /tmp/farmboard-screenshots -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -exec cp -f {} docs/images/ \;
+          rm -f farmboard_screenshots.zip
+
+      - name: Commit screenshots
+        shell: bash
+        run: |
+          set -e
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "Add Farmboard screenshots"
+            git push
+          fi
