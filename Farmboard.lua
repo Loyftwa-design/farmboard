@@ -1,3 +1,4 @@
+-- Farmboard v1.0.0 - by Loyftwa
 local addonName = ...
 
 local Farmboard = {}
@@ -32,6 +33,7 @@ local function PlayGoalCompleteSound()
         end
     end
 
+    -- Fallback to a built-in sound if the custom file cannot be played.
     if PlaySound and SOUNDKIT then
         local soundID = SOUNDKIT.READY_CHECK or SOUNDKIT.ALARM_CLOCK_WARNING_3 or SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON
         if soundID then
@@ -79,7 +81,7 @@ local function NormalizeBoard(board, fallbackID, fallbackName)
     board.locked = board.locked == true
     board.orientation = board.orientation == "VERTICAL" and "VERTICAL" or "HORIZONTAL"
     board.slotCount = IsValidSlotCount(board.slotCount) and tonumber(board.slotCount) or DEFAULT_SLOT_COUNT
-    board.notifyOnComplete = board.notifyOnComplete ~= false
+    board.notifyOnComplete = board.notifyOnComplete == true
 
     if type(board.position) ~= "table" then
         board.position = {
@@ -108,6 +110,7 @@ local function EnsureDatabase()
         FarmboardDB = {}
     end
 
+    -- Migration from the single-board versions <= 0.1.x.
     if type(FarmboardDB.boards) ~= "table" then
         local legacyBoard = {
             id = 1,
@@ -118,7 +121,6 @@ local function EnsureDatabase()
             slotCount = FarmboardDB.slotCount,
             position = FarmboardDB.position,
             slots = FarmboardDB.slots,
-            notifyOnComplete = true,
         }
         FarmboardDB.boards = { legacyBoard }
     end
@@ -131,6 +133,15 @@ local function EnsureDatabase()
     for index, board in ipairs(FarmboardDB.boards) do
         NormalizeBoard(board, index, index == 1 and "Farmboard" or ("Farmboard " .. index))
         maxID = math.max(maxID, board.id)
+    end
+
+    -- v0.3.5 migration: older versions silently defaulted goal notifications to off.
+    -- Enable them once so existing boards actually notify when a goal is crossed.
+    if FarmboardDB.goalNotificationMigration ~= 1 then
+        for _, board in ipairs(FarmboardDB.boards) do
+            board.notifyOnComplete = true
+        end
+        FarmboardDB.goalNotificationMigration = 1
     end
 
     FarmboardDB.nextBoardID = math.max(tonumber(FarmboardDB.nextBoardID) or 1, maxID + 1)
@@ -270,8 +281,6 @@ local function ClearSlot(boardFrame, index)
 
     data.itemID = nil
     data.goal = 0
-    boardFrame.completionState[index] = nil
-    boardFrame.previousCounts[index] = nil
     Farmboard:UpdateSlot(boardFrame, index)
 end
 
@@ -288,8 +297,6 @@ local function AssignItem(boardFrame, index, itemID)
 
     data.itemID = itemID
     data.goal = tonumber(data.goal) or 0
-    boardFrame.completionState[index] = nil
-    boardFrame.previousCounts[index] = nil
     C_Item.RequestLoadItemDataByID(itemID)
     Farmboard:UpdateSlot(boardFrame, index)
     ClearCursor()
@@ -334,11 +341,10 @@ local function CreateSlot(boardFrame, index)
 
     slot.progress = slot:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     slot.progress:SetPoint("BOTTOM", 0, 6)
-    slot.progress:SetWidth(SLOT_WIDTH - 6)
+    slot.progress:SetWidth(SLOT_WIDTH - 4)
     slot.progress:SetJustifyH("CENTER")
     slot.progress:SetWordWrap(false)
     slot.progress:SetText("")
-    slot.progress:SetScale(1.0)
     slot.progress:SetFont(STANDARD_TEXT_FONT, 13, "OUTLINE")
 
     slot.completeMark = slot:CreateTexture(nil, "OVERLAY")
@@ -369,7 +375,8 @@ local function CreateSlot(boardFrame, index)
                 return
             end
 
-            if self.boardFrame.data.slots[self.index].itemID then
+            local data = self.boardFrame.data.slots[self.index]
+            if data and data.itemID then
                 Farmboard:OpenGoalDialog(self.boardFrame, self.index)
             end
         end
@@ -434,20 +441,20 @@ local function CreateSlot(boardFrame, index)
     end)
 
     boardFrame.slots[index] = slot
-    return slot
 end
 
 function Farmboard:LayoutBoard(boardFrame)
-    local orientation = boardFrame.data.orientation
-    local slotCount = tonumber(boardFrame.data.slotCount) or DEFAULT_SLOT_COUNT
+    local data = boardFrame.data
+    local slotCount = tonumber(data.slotCount) or DEFAULT_SLOT_COUNT
     local totalWidth = (slotCount - 1) * HORIZONTAL_SLOT_STEP
+
+    boardFrame.title:SetText(data.name)
 
     for i, slot in ipairs(boardFrame.slots) do
         slot:ClearAllPoints()
-
         if i <= slotCount then
             slot:Show()
-            if orientation == "VERTICAL" then
+            if data.orientation == "VERTICAL" then
                 slot:SetPoint("TOP", boardFrame, "TOP", 0, -(TITLE_HEIGHT + 12) - ((i - 1) * VERTICAL_SLOT_STEP))
             else
                 local x = -totalWidth / 2 + ((i - 1) * HORIZONTAL_SLOT_STEP)
@@ -458,7 +465,7 @@ function Farmboard:LayoutBoard(boardFrame)
         end
     end
 
-    if orientation == "VERTICAL" then
+    if data.orientation == "VERTICAL" then
         boardFrame:SetSize(SLOT_WIDTH + 40, TITLE_HEIGHT + 18 + ((slotCount - 1) * VERTICAL_SLOT_STEP) + SLOT_HEIGHT + FRAME_PADDING)
     else
         boardFrame:SetSize(totalWidth + SLOT_WIDTH + 24, TITLE_HEIGHT + SLOT_HEIGHT + 30)
@@ -482,9 +489,9 @@ function Farmboard:UpdateSlot(boardFrame, index)
         slot.completeMark:Hide()
         slot.qualityBadge:Hide()
         slot.qualityText:Hide()
-        slot:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
         boardFrame.completionState[index] = nil
-        boardFrame.previousCounts[index] = nil
+        boardFrame.lastCounts[index] = nil
+        slot:SetBackdropBorderColor(0.45, 0.45, 0.45, 1)
         return
     end
 
@@ -525,21 +532,18 @@ function Farmboard:UpdateSlot(boardFrame, index)
     if goal > 0 then
         slot.progress:SetText(string.format("%d/%d", total, goal))
         local isComplete = total >= goal
-        local wasComplete = boardFrame.completionState[index]
-        local previousCount = boardFrame.previousCounts[index]
+        local previousTotal = boardFrame.lastCounts[index]
 
-        if previousCount == nil then
-            boardFrame.previousCounts[index] = total
-            boardFrame.completionState[index] = isComplete
-        else
-            local crossedGoal = previousCount < goal and total >= goal
-            boardFrame.previousCounts[index] = total
-            boardFrame.completionState[index] = isComplete
-
-            if crossedGoal and boardFrame.data.notifyOnComplete then
+        -- Track the actual count crossing the target. This is more reliable than only
+        -- comparing the visual completion flag when several WoW inventory events fire.
+        if previousTotal ~= nil and previousTotal < goal and total >= goal then
+            if boardFrame.data.notifyOnComplete then
                 NotifyGoalComplete()
             end
         end
+
+        boardFrame.lastCounts[index] = total
+        boardFrame.completionState[index] = isComplete
 
         if isComplete then
             slot.progress:SetTextColor(0.25, 1, 0.35)
@@ -552,7 +556,7 @@ function Farmboard:UpdateSlot(boardFrame, index)
         end
     else
         boardFrame.completionState[index] = nil
-        boardFrame.previousCounts[index] = total
+        boardFrame.lastCounts[index] = total
         slot.progress:SetText(tostring(total))
         slot.progress:SetTextColor(0.82, 0.82, 0.82)
         slot.completeMark:Hide()
@@ -581,7 +585,7 @@ function Farmboard:CreateBoardFrame(boardData)
     boardFrame.data = boardData
     boardFrame.slots = {}
     boardFrame.completionState = {}
-    boardFrame.previousCounts = {}
+    boardFrame.lastCounts = {}
     boardFrame:SetFrameStrata("MEDIUM")
     boardFrame:SetClampedToScreen(true)
     boardFrame:SetMovable(true)
@@ -592,6 +596,7 @@ function Farmboard:CreateBoardFrame(boardData)
     boardFrame.title:SetPoint("TOP", 0, -8)
     boardFrame.title:SetText(boardData.name)
     boardFrame.title:SetTextColor(1, 0.82, 0.12)
+
 
     boardFrame:SetScript("OnMouseDown", function(self, button)
         if button == "LeftButton" and not self.data.locked then
@@ -646,6 +651,7 @@ function Farmboard:SetSlotCount(boardFrame, slotCount)
     self:UpdateBoard(boardFrame)
 end
 
+-- Goal dialog ---------------------------------------------------------------
 local goalDialog = CreateFrame("Frame", "FarmboardGoalDialog", UIParent, "BackdropTemplate")
 goalDialog:SetSize(330, 190)
 goalDialog:SetPoint("CENTER")
@@ -678,7 +684,7 @@ goalEdit:SetJustifyH("CENTER")
 
 local goalHint = goalDialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 goalHint:SetPoint("TOP", goalEdit, "BOTTOM", 0, -8)
-goalHint:SetText("0 = Ziel entfernen | Max. 9999")
+goalHint:SetText("0 = Ziel entfernen  ·  Max. 9999")
 goalHint:SetTextColor(0.55, 0.55, 0.55)
 
 local goalOK = CreateFrame("Button", nil, goalDialog, "UIPanelButtonTemplate")
@@ -700,14 +706,22 @@ local function ApplyGoal()
     end
 
     local value = tonumber(goalEdit:GetText())
-    if not value or value < 0 or value > MAX_GOAL then
-        Print("Bitte eine Zielmenge zwischen 0 und " .. tostring(MAX_GOAL) .. " eingeben.")
+    if not value or value < 0 then
+        Print("Bitte eine gültige Zielmenge eingeben.")
         return
     end
 
-    boardFrame.data.slots[index].goal = math.floor(value)
+    value = math.floor(value)
+    if value > MAX_GOAL then
+        Print("Die maximale Zielmenge ist 9999.")
+        goalEdit:SetText(tostring(MAX_GOAL))
+        goalEdit:HighlightText()
+        return
+    end
+
+    boardFrame.data.slots[index].goal = value
     boardFrame.completionState[index] = nil
-    boardFrame.previousCounts[index] = GetCounts(boardFrame.data.slots[index].itemID)
+    boardFrame.lastCounts[index] = nil
     Farmboard:UpdateSlot(boardFrame, index)
     goalDialog:Hide()
 end
@@ -741,6 +755,7 @@ function Farmboard:OpenGoalDialog(boardFrame, index)
     goalDialog:Show()
 end
 
+-- Rename dialog -------------------------------------------------------------
 local renameDialog = CreateFrame("Frame", "FarmboardRenameDialog", UIParent, "BackdropTemplate")
 renameDialog:SetSize(330, 145)
 renameDialog:SetPoint("CENTER")
@@ -805,8 +820,114 @@ function Farmboard:OpenRenameDialog(boardFrame)
     renameDialog:Show()
 end
 
+function Farmboard:AddBoard()
+    local id = FarmboardDB.nextBoardID
+    FarmboardDB.nextBoardID = id + 1
+
+    local order = #FarmboardDB.boards + 1
+    local board = {
+        id = id,
+        name = "Farmboard " .. tostring(order),
+        visible = true,
+        locked = false,
+        orientation = "HORIZONTAL",
+        slotCount = DEFAULT_SLOT_COUNT,
+        position = {
+            point = "CENTER",
+            relativePoint = "CENTER",
+            x = (order - 1) * 26,
+            y = -((order - 1) * 26),
+        },
+        slots = {},
+    }
+    NormalizeBoard(board, id, board.name)
+    table.insert(FarmboardDB.boards, board)
+
+    local boardFrame = self:CreateBoardFrame(board)
+    self:OpenRenameDialog(boardFrame)
+    Print("Neues Farmboard erstellt.")
+    return boardFrame
+end
+
+function Farmboard:DuplicateBoard(sourceFrame)
+    if not sourceFrame or not sourceFrame.data then
+        return nil
+    end
+
+    local source = sourceFrame.data
+    local id = FarmboardDB.nextBoardID
+    FarmboardDB.nextBoardID = id + 1
+    local order = #FarmboardDB.boards + 1
+
+    local board = {
+        id = id,
+        name = (source.name or "Farmboard") .. " Kopie",
+        visible = true,
+        locked = false,
+        orientation = source.orientation,
+        slotCount = source.slotCount,
+        notifyOnComplete = source.notifyOnComplete == true,
+        position = {
+            point = source.position and source.position.point or "CENTER",
+            relativePoint = source.position and source.position.relativePoint or "CENTER",
+            x = (source.position and source.position.x or 0) + 28,
+            y = (source.position and source.position.y or 0) - 28,
+        },
+        slots = {},
+    }
+
+    for i = 1, MAX_SLOT_COUNT do
+        local srcSlot = source.slots and source.slots[i] or nil
+        board.slots[i] = {
+            itemID = srcSlot and srcSlot.itemID or nil,
+            goal = srcSlot and (tonumber(srcSlot.goal) or 0) or 0,
+        }
+    end
+
+    NormalizeBoard(board, id, board.name)
+    table.insert(FarmboardDB.boards, board)
+
+    local boardFrame = self:CreateBoardFrame(board)
+    Print("Farmboard dupliziert.")
+    return boardFrame
+end
+
+function Farmboard:DeleteBoard(boardFrame)
+    if #FarmboardDB.boards <= 1 then
+        Print("Das letzte Farmboard kann nicht gelöscht werden.")
+        return
+    end
+
+    local _, index = GetBoardData(boardFrame.data.id)
+    if not index then
+        return
+    end
+
+    table.remove(FarmboardDB.boards, index)
+    boardFrame:Hide()
+    self.frames[boardFrame.data.id] = nil
+    Print("Farmboard gelöscht.")
+end
+
+StaticPopupDialogs["FARMBOARD_DELETE_BOARD"] = {
+    text = "Farmboard '%s' wirklich löschen?",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(self, data)
+        local boardFrame = data and Farmboard.frames[data.boardID]
+        if boardFrame then
+            Farmboard:DeleteBoard(boardFrame)
+        end
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+-- Slot count dialog ---------------------------------------------------------
 local slotCountDialog = CreateFrame("Frame", "FarmboardSlotCountDialog", UIParent, "BackdropTemplate")
-slotCountDialog:SetSize(330, 155)
+slotCountDialog:SetSize(330, 160)
 slotCountDialog:SetPoint("CENTER")
 slotCountDialog:SetFrameStrata("DIALOG")
 slotCountDialog:SetClampedToScreen(true)
@@ -819,7 +940,7 @@ slotCountTitle:SetText("Anzahl der Felder")
 slotCountTitle:SetTextColor(1, 0.82, 0.12)
 
 local slotCountEdit = CreateFrame("EditBox", nil, slotCountDialog, "InputBoxTemplate")
-slotCountEdit:SetSize(150, 28)
+slotCountEdit:SetSize(170, 28)
 slotCountEdit:SetPoint("TOP", 0, -50)
 slotCountEdit:SetAutoFocus(false)
 slotCountEdit:SetNumeric(true)
@@ -828,7 +949,7 @@ slotCountEdit:SetJustifyH("CENTER")
 
 local slotCountHint = slotCountDialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 slotCountHint:SetPoint("TOP", slotCountEdit, "BOTTOM", 0, -8)
-slotCountHint:SetText("1 bis 24 Felder")
+slotCountHint:SetText("1 bis " .. tostring(MAX_SLOT_COUNT) .. " Felder")
 slotCountHint:SetTextColor(0.55, 0.55, 0.55)
 
 local slotCountOK = CreateFrame("Button", nil, slotCountDialog, "UIPanelButtonTemplate")
@@ -873,108 +994,6 @@ function Farmboard:OpenSlotCountDialog(boardFrame)
     slotCountEdit:SetText(tostring(boardFrame.data.slotCount or DEFAULT_SLOT_COUNT))
     slotCountDialog:Show()
 end
-
-function Farmboard:AddBoard()
-    local id = FarmboardDB.nextBoardID
-    FarmboardDB.nextBoardID = id + 1
-
-    local order = #FarmboardDB.boards + 1
-    local board = {
-        id = id,
-        name = "Farmboard " .. tostring(order),
-        visible = true,
-        locked = false,
-        orientation = "HORIZONTAL",
-        slotCount = DEFAULT_SLOT_COUNT,
-        notifyOnComplete = true,
-        position = {
-            point = "CENTER",
-            relativePoint = "CENTER",
-            x = (order - 1) * 26,
-            y = -((order - 1) * 26),
-        },
-        slots = {},
-    }
-    NormalizeBoard(board, id, board.name)
-    table.insert(FarmboardDB.boards, board)
-
-    local boardFrame = self:CreateBoardFrame(board)
-    self:OpenRenameDialog(boardFrame)
-    return boardFrame
-end
-
-function Farmboard:DuplicateBoard(sourceFrame)
-    if not sourceFrame or not sourceFrame.data then
-        return
-    end
-
-    local id = FarmboardDB.nextBoardID
-    FarmboardDB.nextBoardID = id + 1
-    local order = #FarmboardDB.boards + 1
-
-    local source = sourceFrame.data
-    local board = {
-        id = id,
-        name = (source.name or "Farmboard") .. " Kopie",
-        visible = true,
-        locked = false,
-        orientation = source.orientation,
-        slotCount = source.slotCount,
-        notifyOnComplete = source.notifyOnComplete == true,
-        position = {
-            point = source.position.point or "CENTER",
-            relativePoint = source.position.relativePoint or "CENTER",
-            x = (source.position.x or 0) + 30,
-            y = (source.position.y or 0) - 30,
-        },
-        slots = {},
-    }
-
-    for i = 1, MAX_SLOT_COUNT do
-        board.slots[i] = {
-            itemID = source.slots[i] and source.slots[i].itemID or nil,
-            goal = source.slots[i] and source.slots[i].goal or 0,
-        }
-    end
-
-    NormalizeBoard(board, id, board.name)
-    table.insert(FarmboardDB.boards, board)
-    local boardFrame = self:CreateBoardFrame(board)
-    Print("Farmboard dupliziert: " .. board.name)
-    return boardFrame
-end
-
-function Farmboard:DeleteBoard(boardID)
-    local board, index = GetBoardData(boardID)
-    if not board or not index then
-        return
-    end
-
-    local boardFrame = self.frames[boardID]
-    if boardFrame then
-        boardFrame:Hide()
-        boardFrame:SetParent(nil)
-        self.frames[boardID] = nil
-    end
-
-    table.remove(FarmboardDB.boards, index)
-    Print("Farmboard gelöscht.")
-end
-
-StaticPopupDialogs["FARMBOARD_DELETE_BOARD"] = {
-    text = "Farmboard '%s' wirklich löschen?",
-    button1 = "Löschen",
-    button2 = "Abbrechen",
-    OnAccept = function(_, data)
-        if data and data.boardID then
-            Farmboard:DeleteBoard(data.boardID)
-        end
-    end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
 
 function Farmboard:OpenContextMenu(boardFrame)
     if not MenuUtil or not MenuUtil.CreateContextMenu then
@@ -1037,7 +1056,7 @@ function Farmboard:OpenContextMenu(boardFrame)
             boardFrame.data.locked and "Fenster entsperren" or "Fenster sperren",
             function()
                 boardFrame.data.locked = not boardFrame.data.locked
-                Print(boardFrame.data.locked and "Farmboard gesperrt." or "Farmboard entsperrt.")
+                Print(boardFrame.data.locked and "Fenster gesperrt." or "Fenster entsperrt.")
             end
         )
 
@@ -1058,11 +1077,9 @@ end
 function Farmboard:ShowAll()
     for _, board in ipairs(FarmboardDB.boards) do
         board.visible = true
-        local boardFrame = self.frames[board.id]
-        if boardFrame then
-            boardFrame:Show()
-            self:UpdateBoard(boardFrame)
-        end
+        local boardFrame = self.frames[board.id] or self:CreateBoardFrame(board)
+        boardFrame:Show()
+        self:UpdateBoard(boardFrame)
     end
 end
 
@@ -1239,10 +1256,10 @@ function Farmboard:CreateMinimapButton()
     background:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
 
     local icon = button:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(24, 24)
+    icon:SetSize(22, 22)
     icon:SetPoint("CENTER", 0, 0)
-    icon:SetTexture("Interface\\AddOns\\Farmboard\\Media\\FarmboardMinimapIcon")
-    icon:SetTexCoord(0.0, 1.0, 0.0, 1.0)
+    icon:SetTexture("Interface\\AddOns\\Farmboard\\Media\\FarmboardMinimapIcon.tga")
+    icon:SetTexCoord(0, 1, 0, 1)
     button.icon = icon
 
     local border = button:CreateTexture(nil, "OVERLAY")
@@ -1306,6 +1323,7 @@ function Farmboard:CreateMinimapButton()
     SetMinimapButtonPosition()
 end
 
+-- Events --------------------------------------------------------------------
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -1326,53 +1344,57 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Farmboard:CreateBoardFrame(board)
         end
         Farmboard:CreateMinimapButton()
+        Farmboard:UpdateAll()
         Print("geladen. /farmboard oder /fb")
         return
     end
 
-    if not FarmboardDB then
+    if not FarmboardDB or type(FarmboardDB.boards) ~= "table" then
         return
     end
 
     Farmboard:UpdateAll()
 end)
 
+-- Slash commands ------------------------------------------------------------
 SLASH_FARMBOARD1 = "/farmboard"
 SLASH_FARMBOARD2 = "/fb"
 
 SlashCmdList.FARMBOARD = function(message)
-    message = strtrim(string.lower(message or ""))
+    local rawMessage = strtrim(message or "")
+    local messageLower = string.lower(rawMessage)
 
-    if message == "" or message == "toggle" then
+    if messageLower == "" or messageLower == "toggle" then
         Farmboard:ToggleAll()
         return
     end
 
-    if message == "new" then
-        Farmboard:AddBoard()
-        return
-    end
-
-    if message == "show" then
+    if messageLower == "show" then
         Farmboard:ShowAll()
         return
     end
 
-    if message == "hide" then
+    if messageLower == "hide" then
         Farmboard:HideAll()
         return
     end
 
-    if message == "reset" then
+    if messageLower == "new" or messageLower == "neu" then
+        Farmboard:AddBoard()
+        return
+    end
+
+    if messageLower == "reset" then
         Farmboard:ResetAllPositions()
         return
     end
 
     Print("Befehle:")
-    Print("/fb - Alle Farmboards ein-/ausblenden")
-    Print("/fb new - Neues Farmboard")
-    Print("/fb show - Alle Farmboards anzeigen")
-    Print("/fb hide - Alle Farmboards ausblenden")
-    Print("/fb reset - Positionen zurücksetzen")
+    Print("/fb - alle Farmboards ein-/ausblenden")
+    Print("/fb new - neues Farmboard erstellen")
+    Print("/fb show - alle Farmboards anzeigen")
+    Print("/fb hide - alle Farmboards ausblenden")
+    Print("/fb reset - alle Positionen zurücksetzen")
     Print("Minimap: Linksklick = ein/aus, Rechtsklick = globales Menü")
+    Print("Board-Rechtsklick: Layout, Feldanzahl, Umbenennen, Sperren, Löschen")
 end
