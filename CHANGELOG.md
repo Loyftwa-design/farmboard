@@ -1,20 +1,20 @@
 # Changelog
 
-## v1.0.0
+## 1.0.0
 
 First public release.
 
 - Multiple independent Farmboards
 - Drag & drop item tracking
-- Goal amounts up to 9999
-- Bags, character bank and Warband/Account Bank counting
-- Midnight item quality indicators
+- Farming targets up to 9999
+- Bags, character bank and Warband/Account Bank tracking
+- Midnight crafting/reagent quality indicators
 - 1–24 configurable slots per board
-- Horizontal / vertical layouts
+- Horizontal and vertical layouts
 - Movable and lockable boards
-- Board rename, duplicate, visibility and deletion controls
-- Minimap button and global management menu
-- Goal-complete visual marker
-- Custom goal-complete sound
-- Center-screen `- Ziel Erreicht! -` notification
-- Persistent settings and automatic migration from development versions
+- Rename, duplicate, visibility, reset and delete controls
+- Minimap button and global board management
+- Goal-complete marker
+- Custom completion sound
+- Center-screen goal-complete notification
+- Persistent settings
