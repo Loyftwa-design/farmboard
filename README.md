@@ -1,6 +1,14 @@
 # Farmboard
 
-**Farmboard** is a lightweight farming progress tracker for **World of Warcraft: Midnight**.
+**Lightweight farming goal tracker for World of Warcraft: Midnight.**
+
+## Download
+
+### [⬇ Download Farmboard v1.0.0](https://github.com/Loyftwa-design/farmboard/releases/download/v1.0.0/Farmboard-v1.0.0.zip)
+
+> **Installation:** Download the release ZIP above (or install through CurseForge), extract it, and place the included `Farmboard` folder in `World of Warcraft/_retail_/Interface/AddOns/`.
+>
+> **Do not use GitHub's `Code → Download ZIP` button for installation.** That button downloads the complete source repository, including documentation and screenshots, instead of the install-ready addon package.
 
 Create multiple customizable farming boards, drag items into tracking slots, set collection goals, and monitor your progress directly in-game.
 
@@ -17,7 +25,7 @@ Create multiple customizable farming boards, drag items into tracking slots, set
 - Rename and duplicate boards
 - Show, hide, reset and delete individual boards
 - Minimap button with global board management
-- Goal-complete marker, sound and centered **“- Ziel Erreicht! -”** notification
+- Goal-complete marker, custom sound and centered **“- Ziel Erreicht! -”** notification
 - Persistent settings via SavedVariables
 - No external libraries required
 
@@ -71,14 +79,27 @@ Create and manage your Farmboards quickly through the minimap button.
 
 ## Installation
 
-1. Download `Farmboard-v1.0.0.zip` from `dist/`.
-2. Extract the `Farmboard` folder to:
+1. Download the latest package from [GitHub Releases](https://github.com/Loyftwa-design/farmboard/releases/latest) or CurseForge.
+2. Extract the ZIP.
+3. Copy the included `Farmboard` folder to:
    `World of Warcraft/_retail_/Interface/AddOns/`
-3. Restart World of Warcraft or use `/reload`.
+4. Restart World of Warcraft or use `/reload`.
 
-## Version
+The final folder must look like this:
 
-Current release: **1.0.0**
+```text
+Interface/AddOns/Farmboard/
+├── Farmboard.lua
+├── Farmboard.toc
+└── Media/
+```
+
+## Releases
+
+Current stable release: **v1.0.0**
+
+- [Release page](https://github.com/Loyftwa-design/farmboard/releases/tag/v1.0.0)
+- [Direct download: Farmboard-v1.0.0.zip](https://github.com/Loyftwa-design/farmboard/releases/download/v1.0.0/Farmboard-v1.0.0.zip)
 
 ## Author
 
