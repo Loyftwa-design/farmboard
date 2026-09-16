@@ -1,5 +1,10 @@
 # Farmboard
 
+![Release](https://img.shields.io/badge/release-v1.0.0-4c6ef5?style=flat-square)
+![WoW](https://img.shields.io/badge/WoW-Retail%2012.1.0-7c3aed?style=flat-square)
+![Expansion](https://img.shields.io/badge/Expansion-Midnight-22c55e?style=flat-square)
+![Languages](https://img.shields.io/badge/languages-English%20%7C%20Deutsch-3b82f6?style=flat-square)
+
 **Lightweight farming goal tracker for World of Warcraft: Midnight.**
 
 ## Download
