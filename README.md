@@ -1,8 +1,6 @@
 # Farmboard
 
-![Farmboard](docs/images/Farmboard-Icon-400.png)
-
-**Farmboard** is a lightweight farming goal tracker for **World of Warcraft: Midnight**.
+**Farmboard** is a lightweight farming progress tracker for **World of Warcraft: Midnight**.
 
 Create multiple customizable farming boards, drag items into tracking slots, set collection goals, and monitor your progress directly in-game.
 
@@ -11,15 +9,16 @@ Create multiple customizable farming boards, drag items into tracking slots, set
 - Multiple independent Farmboards
 - Drag & drop item tracking
 - Custom farming goals from **1 to 9999**
-- Live counts for bags, character bank and Warband/Account Bank
-- Midnight crafting/reagent quality markers
-- Free slot count from **1 to 24** per board
+- Tracks bags, character bank and Warband/Account Bank
+- Midnight crafting/reagent quality indicators
+- **1–24 configurable slots** per board
 - Horizontal and vertical layouts
 - Movable and lockable boards
-- Rename, duplicate, show/hide and delete boards
+- Rename and duplicate boards
+- Show, hide, reset and delete individual boards
 - Minimap button with global board management
-- Goal-complete marker, custom sound and centered **“- Ziel Erreicht! -”** notification
-- Persistent settings through SavedVariables
+- Goal-complete marker, sound and centered **“- Ziel Erreicht! -”** notification
+- Persistent settings via SavedVariables
 - No external libraries required
 
 ## Screenshots
@@ -53,38 +52,33 @@ Create and manage your Farmboards quickly through the minimap button.
 
 ## Controls
 
-- **Drag item onto slot** — Add or replace an item
-- **Right-click occupied slot** — Set target amount
-- **Shift + Right-click occupied slot** — Remove item
-- **Drag Farmboard** — Move board while unlocked
+- **Drag item onto a slot** — Add or replace an item
+- **Right-click item slot** — Set the farming target
+- **Shift + Right-click item slot** — Remove the item
+- **Drag Farmboard** — Move the board while it is unlocked
 - **Right-click Farmboard** — Open board-specific options
-- **Left-click minimap button** — Show/hide all Farmboards
-- **Right-click minimap button** — Open global Farmboard menu
-- **Drag minimap button** — Reposition it around the minimap
+- **Left-click minimap button** — Show or hide all Farmboards
+- **Right-click minimap button** — Open the global Farmboard menu
+- **Drag minimap button** — Move the button around the minimap
 
 ## Slash Commands
 
-```text
-/farmboard or /fb  - Show / hide all Farmboards
-/fb new            - Create a new Farmboard
-/fb show           - Show all Farmboards
-/fb hide           - Hide all Farmboards
-/fb reset          - Reset all Farmboard positions
-```
+- `/farmboard` or `/fb` — Show/hide all Farmboards
+- `/fb new` — Create a new Farmboard
+- `/fb show` — Show all Farmboards
+- `/fb hide` — Hide all Farmboards
+- `/fb reset` — Reset all Farmboard positions
 
 ## Installation
 
-Extract the `Farmboard` folder to:
-
-```text
-World of Warcraft/_retail_/Interface/AddOns/
-```
-
-After updating, use `/reload` or restart World of Warcraft.
+1. Download `Farmboard-v1.0.0.zip` from `dist/`.
+2. Extract the `Farmboard` folder to:
+   `World of Warcraft/_retail_/Interface/AddOns/`
+3. Restart World of Warcraft or use `/reload`.
 
 ## Version
 
-Current release: **v1.0.0**
+Current release: **1.0.0**
 
 ## Author
 
