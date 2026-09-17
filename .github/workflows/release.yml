@@ -22,6 +22,7 @@ jobs:
           rm -rf build dist
           mkdir -p build/Farmboard/Media dist
 
+          cp FarmboardStorage.lua build/Farmboard/FarmboardStorage.lua
           cp Farmboard.lua build/Farmboard/Farmboard.lua
           cp Farmboard.toc build/Farmboard/Farmboard.toc
           cp README.md build/Farmboard/README.txt
