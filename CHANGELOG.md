@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1
+
+- Farmboards are now stored per character instead of being shared account-wide.
+- The minimap button position remains account-wide.
+- Existing shared boards are migrated once to the first character loaded after updating.
+- Added a migration backup of the previous shared Farmboard database.
+
 ## 1.0.0
 
 First public release.
